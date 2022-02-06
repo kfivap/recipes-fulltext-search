@@ -1,6 +1,7 @@
 const knex = require('knex')(require('./knexfile'));
 
-const maxNotStatedIngredients = 5
+const maxNotStatedIngredients = 50
+const LIMIT = 100000
 
 async function findRecipe(ingredients) {
     const sqlIngredients = ingredients.join('|')
@@ -27,18 +28,38 @@ async function findRecipe(ingredients) {
         JOIN ingredients i on i.id = rec_ing.ingredient_id
         GROUP BY rec_ing.recipe_id
     ) t USING(id)
-    WHERE array_length(t.ing_array, 1) <= ${ingredients.length + maxNotStatedIngredients} AND r.id in (${recipesIdsResult.rows[0].array.slice(0, 10)}) 
-    ORDER BY array_length(t.ing_array, 1) ASC
+    WHERE array_length(t.ing_array, 1) <= ${ingredients.length + maxNotStatedIngredients} AND r.id in (${recipesIdsResult.rows[0].array.slice(0, LIMIT)}) 
+    ORDER BY array_length(t.ing_array, 1) DESC
     `)
-    //returns array of recipes where id in recipesIds and ingredients length less than ingredients + maxNotStatedIngredients
-    // order by less ingredients
 
+    let total = result.rows.length
+    let timeStart = Date.now()
+    let countProcessed = 0
+    for (const row of result.rows) {
+        countProcessed++
+
+        let countMatch = 0
+        for (const ing of row.ing_array) {
+            // console.log(ing)
+            const r = await knex.raw(`SELECT to_tsvector('french', ?)@@ to_tsquery('french', '${sqlIngredients}')`, [ing])
+            if (r.rows[0]['?column?']) {
+                countMatch++
+            }
+        }
+        row.countMatch = countMatch
+        console.log(`done ${countProcessed} of ${total}, running ${Date.now()- timeStart} ms`)
+        // return
+    }
+    result.rows = result.rows.sort((a,b)=>{
+        return b.countMatch - a.countMatch
+    })
+    // console.log(result.rows.length)
     return result.rows
 }
 
 async function main() {
-    const result = await findRecipe(['Oeuf', 'fromage', 'sel', 'oignons'])
-    console.log(result)
+    const result = await findRecipe(['fromage', 'oignons', 'pomme', 'champignon', 'ananas', 'tomate', 'raviole', 'cognac', 'lait', 'paprika', 'liquide'])
+    console.log(result.slice(0,7))
 }
 
 main()
