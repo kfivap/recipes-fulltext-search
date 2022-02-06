@@ -1,5 +1,7 @@
 const knex = require('knex')(require('./knexfile'));
 
+const maxNotStatedIngredients = 5
+
 async function findRecipe(ingredients) {
     const sqlIngredients = ingredients.join('|')
     // const result = await knex.raw(`
@@ -8,16 +10,14 @@ async function findRecipe(ingredients) {
     // LEFT JOIN recipes_ingredients ON ingredients.id = recipes_ingredients.ingredient_id
     // WHERE to_tsvector('french', ingredients.name) @@ to_tsquery('french', '${ingredients}') 
     // `);
-    const recipesResult = await knex.raw(`
+    const recipesIdsResult = await knex.raw(`
     SELECT ARRAY(
         SELECT DISTINCT(recipes_ingredients.recipe_id)
     FROM ingredients 
     LEFT JOIN recipes_ingredients ON ingredients.id = recipes_ingredients.ingredient_id
     WHERE to_tsvector('french', ingredients.name) @@ to_tsquery('french', '${sqlIngredients}') 
     )
-    `);
-    console.log(ingredients, sqlIngredients)
-    console.log(recipesResult.rows[0].array)
+    `); //returns array of recipes_ids matching query
     const result = await knex.raw(`
     SELECT id, r.name as rec_name, t.ing_array, array_length(t.ing_array, 1)
     FROM recipes r
@@ -27,11 +27,12 @@ async function findRecipe(ingredients) {
         JOIN ingredients i on i.id = rec_ing.ingredient_id
         GROUP BY rec_ing.recipe_id
     ) t USING(id)
-    WHERE array_length(t.ing_array, 1) <= ${ingredients.length + 10} AND r.id in (${recipesResult.rows[0].array.slice(0, 10)}) 
-
+    WHERE array_length(t.ing_array, 1) <= ${ingredients.length + maxNotStatedIngredients} AND r.id in (${recipesIdsResult.rows[0].array.slice(0, 10)}) 
+    ORDER BY array_length(t.ing_array, 1) ASC
     `)
+    //returns array of recipes where id in recipesIds and ingredients length less than ingredients + maxNotStatedIngredients
+    // order by less ingredients
 
-    console.log(ingredients.length)
     return result.rows
 }
 
