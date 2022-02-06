@@ -19,7 +19,7 @@ async function findRecipe(ingredients) {
     console.log(ingredients)
     console.log(recipesResult.rows[0].array)
     const result = await knex.raw(`
-    SELECT id, r.name as rec_name, t.ing_array
+    SELECT id, r.name as rec_name, t.ing_array, array_length(t.ing_array)
     FROM recipes r
     JOIN (
         SELECT rec_ing.recipe_id as id, array_agg(i.name) as ing_array
@@ -27,7 +27,7 @@ async function findRecipe(ingredients) {
         JOIN ingredients i on i.id = rec_ing.ingredient_id
         GROUP BY rec_ing.recipe_id
     ) t USING(id)
-    WHERE r.id in (${recipesResult.rows[0].array.slice(0,10)})
+    WHERE r.id in (${recipesResult.rows[0].array.slice(0,10)}) 
     `)
 
     return result.rows
